@@ -10,6 +10,7 @@ stopOK      = threading.Event()
 runOK       = threading.Event()
 calibrateOK = threading.Event()
 terminate   = threading.Event()
+disconnect  = threading.Event()
 queueEvent  = threading.Event()
 
 qLock       = threading.Lock()

@@ -67,6 +67,12 @@ Further options that control the behavior:
 -q --quant      use MIDI clock input for quantization (this 
                 only affects rapid fire mode)
 -o --oct <k>    number of octaves spanned by 90 degrees 
+
+Exit codes:
+0  Program terminated by user (ctrl-C)
+1  Illegal option
+2  Connection timed out / device disconnected
+3  Connection failed 
 """
 
 def parseArgs(argv):
@@ -108,7 +114,7 @@ def parseArgs(argv):
                     addCC(mode, axis, cc, CTRL_DRAG)
                 else:
                     usage()
-                    exit(2)
+                    exit(1)
             else:
                 m = re.match('^cc(\d+)$', beh)
                 if m:
@@ -116,7 +122,7 @@ def parseArgs(argv):
                     addCC(mode, axis, cc, CTRL_FREE)
                 else:
                     usage()
-                    exit(2)
+                    exit(1)
     shortOpts = "x:y:z:X:Y:Z:s:gqaAo:m:c:p:"
     longOpts = ["x=","y=","z=","X=","Y=","Z=","scale=", "chan=", "quant",
                 "gliss","arp","Arp","oct=","mac=","midiout=","midiin=", "pattern="]
@@ -124,7 +130,7 @@ def parseArgs(argv):
         opts, args = getopt.getopt(argv, shortOpts, longOpts)
     except getopt.GetoptError:
         usage()
-        exit(2)
+        exit(1)
     for opt,arg in opts:
         if opt in ["-g", "--gliss"]:
             p.gliss = True
@@ -169,18 +175,24 @@ def parseArgs(argv):
                 p.alsaIn = (int(m.group(1)), int(m.group(2)))
             else:
                 usage()
-                exit(2)
+                exit(1)
         else:
             usage()
-            exit(2)
+            exit(1)
     return p
+
+
+# def sigterm_handler(_signo, _stack_frame):
+#     print "TERMINATE"
 
 # ============================================================================
 
+# signal.signal(signal.SIGTERM, sigterm_handler)
+
 args = sys.argv[1:]
 args.append("-m")
-# args.append('20:14:12:17:01:67')
-args.append('20:14:12:17:02:47')
+args.append('20:14:12:17:01:67')
+#args.append('20:14:12:17:02:47')
 params = parseArgs(args)
 
 # initialize ALSA 
@@ -196,7 +208,7 @@ if params.alsaIn is not None:
 sock = com.connect(params.btMAC)
 if not sock:
     logging.error('connection to laser gun failed')
-    exit(-1)
+    exit(2)
 
 listener = Listener(sock)
 scheduler = Scheduler(params)
@@ -217,7 +229,12 @@ if not com.startGun(sock):
 
 try:
     while True:
-        time.sleep(1)
+        time.sleep(0.5)
+        if sync.disconnect.isSet():
+            print "disconnected :-("
+            sock.close()
+            terminate()
+            break
 except:
     terminate()
 

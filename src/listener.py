@@ -6,6 +6,8 @@ import threading
 import select
 import logging
 
+from threading import Timer
+
 import sync
 import command
 
@@ -17,6 +19,10 @@ class Listener (threading.Thread):
         self.sock  = sock
         self.ready = select.select([sock], [], [], 1)
         self.pendingMsg = ''
+        self.running = False
+        self.alive = True   
+        self.watchdog = Timer(1.0, self.die)     
+        self.watchdog.start()
 
     def readSock(self):
         resp = self.pendingMsg
@@ -42,12 +48,26 @@ class Listener (threading.Thread):
         time.sleep(0.5)
         return 'RUN OK'
 
-    # def putCommand(self, cmd):
-    #     sync.qLock.acquire()
-    #     sync.queue.put(cmd)
-    #     logging.debug("send command %s" % command.cmd2str(cmd))
-    #     sync.qLock.release()
-    #     sync.queueEvent.set()
+    def live(self):
+        self.alive = True
+
+    def die(self):
+        if not self.running:
+            # avoid suicide before start
+            self.watchdog = Timer(0.5, self.die)
+            self.watchdog.start()
+            return
+        if self.alive:
+            # see if someone will claim we are alive in the next second or so
+            self.alive = False
+            self.watchdog = Timer(0.5, self.die)
+            self.watchdog.start()
+        else:
+            # ok, no one claimed we are alive, so we are probably dead
+            cmd = (command.TRG_OFF, None)
+            sync.putCommand(cmd)
+            sync.disconnect.set()
+            print "I'm dead :-("            
 
     def run(self):
         print "starting bluetooth listener"
@@ -56,10 +76,13 @@ class Listener (threading.Thread):
             if msg is None:
                 continue
             logging.debug("bluetooth message: %s" % msg)
+            self.live()
             if msg == 'RUN OK':
+                self.running = True
                 sync.runOK.set()
                 continue
             if msg == 'STP OK':
+                self.running = False
                 sync.stopOK.set()
                 continue
             if msg == 'RST OK':
